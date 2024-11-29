@@ -466,6 +466,7 @@ def _():
 
 
 class BuildArgs(model.TargetArgs):
+    release: bool = cli.arg(None, "release", "Build in release mode")
     component: str = cli.operand("component", "Component to build", default="__main__")
     universe: bool = cli.arg(None, "universe", "Does it for all targets")
     database: bool = cli.arg(
@@ -475,8 +476,12 @@ class BuildArgs(model.TargetArgs):
     )
 
 
+@cli.command(None, "build", "Build a component or all components")
 @cli.command("b", "builder/build", "Build a component or all components")
 def _(args: BuildArgs):
+    if args.release:
+        args.mixins.append("release")
+
     if args.universe:
         registry = model.Registry.use(args)
         for target in registry.iter(model.Target):
@@ -509,6 +514,7 @@ class RunArgs(BuildArgs, shell.DebugArgs, shell.ProfileArgs):
     )
 
 
+@cli.command(None, "run", "Run a component or __main__ if not specified")
 @cli.command("r", "builder/run", "Run a component or __main__ if not specified")
 def runCmd(args: RunArgs):
     if args.debug:
@@ -518,6 +524,9 @@ def runCmd(args: RunArgs):
     if args.component is None:
         args.component = "__main__"
 
+    if args.release:
+        args.mixins.append("release")
+
     scope = TargetScope.use(args)
 
     if args.component in scope.target.routing:
@@ -526,8 +535,17 @@ def runCmd(args: RunArgs):
     component = scope.registry.lookup(
         args.component, model.Component, includeProvides=True
     )
+
     if component is None:
         raise RuntimeError(f"Component {args.component} not found")
+
+    if component.type == model.Kind.LIB:
+        component = scope.registry.lookup(
+            args.component + ".main", model.Component, includeProvides=True
+        )
+
+    if component is None:
+        raise RuntimeError(f"No entry point found for {args.component}")
 
     product = build(scope, component)[0]
 
@@ -561,6 +579,39 @@ def _(args: RunArgs):
     # always enable debug mode.
     args.debug = True
     runCmd(args)
+
+
+class InstallArgs(model.TargetArgs):
+    component: str = cli.operand("component", "Component to build", default="__main__")
+
+    prefix: str = cli.arg("p", "prefix", "Installation prefix", default="/usr/local")
+    sysroot: str = cli.arg("s", "sysroot", "Installation sysroot", default="")
+    format: str = cli.arg("f", "format", "Installation format", default="unix")
+
+
+@cli.command("i", "builder/install", "Install a component")
+def _(args: InstallArgs):
+    args.props |= {"prefix": args.prefix}
+    if not os.path.isabs(args.prefix):
+        args.prefix = os.path.join(os.getcwd(), args.prefix)
+
+    if not args.sysroot:
+        args.sysroot = args.prefix
+
+    if not os.path.isabs(args.sysroot):
+        args.sysroot = os.path.join(os.getcwd(), args.sysroot)
+
+    scope = TargetScope.use(args)
+    component = None
+    if args.component is not None:
+        component = scope.registry.lookup(args.component, model.Component)
+    products = build(
+        scope,
+        component if component is not None else "all",
+    )
+
+    for product in products:
+        pass
 
 
 @cli.command("c", "builder/clean", "Clean build files")

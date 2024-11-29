@@ -21,7 +21,7 @@ rules: dict[str, Rule] = {
         "*.o",
         "-c -o $out $in -MD -MF $out.d $flags $cincs $cdefs",
         [
-            "-std=gnu2x",
+            "-std=gnu2y",
             "-Wall",
             "-Wextra",
             "-Werror",
@@ -35,7 +35,7 @@ rules: dict[str, Rule] = {
         "*.o",
         "-c -o $out $in -MD -MF $out.d $flags $cincs $cdefs",
         [
-            "-std=gnu++2b",
+            "-std=gnu++2c",
             "-Wall",
             "-Wextra",
             "-Werror",
