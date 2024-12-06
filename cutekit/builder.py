@@ -474,6 +474,7 @@ class BuildArgs(model.TargetArgs):
         "database",
         "Generate compilation database (compile_commands.json)",
     )
+    noCache: bool = cli.arg(None, "no-cache", "Do not use cache")
 
 
 @cli.command(None, "build", "Build a component or all components")
@@ -481,6 +482,9 @@ class BuildArgs(model.TargetArgs):
 def _(args: BuildArgs):
     if args.release:
         args.mixins.append("release")
+
+    if not args.noCache:
+        args.mixins.append("cache")
 
     if args.universe:
         registry = model.Registry.use(args)
@@ -526,6 +530,9 @@ def runCmd(args: RunArgs):
 
     if args.release:
         args.mixins.append("release")
+
+    if not args.noCache:
+        args.mixins.append("cache")
 
     scope = TargetScope.use(args)
 
