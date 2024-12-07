@@ -8,7 +8,6 @@ from . import (
     const,
     model,
     plugins,
-    pods,
     shell,
     vt100,
 )
@@ -58,7 +57,6 @@ class logger:
 
 class RootArgs(
     plugins.PluginsArgs,
-    pods.PodSetupArgs,
     logger.LoggerArgs,
 ):
     pass
@@ -70,7 +68,6 @@ def _(args: RootArgs):
     const.setup()
     logger.setup(args)
     plugins.setup(args)
-    pods.setup(args)
 
 
 @cli.command("u", "usage", "Show usage information")

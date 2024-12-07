@@ -109,21 +109,10 @@ class ProductScope(ComponentScope):
 Compute = Callable[[TargetScope], list[str]]
 _vars: dict[str, Compute] = {}
 
-Hook = Callable[[TargetScope], None]
-_hooks: dict[str, Hook] = {}
-
 
 def var(name: str) -> Callable[[Compute], Compute]:
     def decorator(func: Compute):
         _vars[name] = func
-        return func
-
-    return decorator
-
-
-def hook(name: str) -> Callable[[Hook], Hook]:
-    def decorator(func: Hook):
-        _hooks[name] = func
         return func
 
     return decorator
@@ -384,33 +373,6 @@ def gen(out: TextIO, scope: TargetScope):
     all(w, scope)
 
 
-@hook("generate-global-aliases")
-def _globalHeaderHook(scope: TargetScope):
-    generatedDir = Path(shell.mkdir(os.path.join(const.GENERATED_DIR, "__aliases__")))
-    for c in scope.registry.iter(model.Component):
-        if c.type != model.Kind.LIB:
-            continue
-
-        modPath = shell.either(
-            [
-                os.path.join(c.dirname(), "_mod.h"),
-                os.path.join(c.dirname(), "mod.h"),
-            ]
-        )
-
-        aliasPath = generatedDir / c.id
-        if modPath is None or os.path.exists(aliasPath):
-            continue
-
-        targetPath = f"{c.id}/{os.path.basename(modPath)}"
-        print(f"Generating alias <{c.id}> -> <{targetPath}>")
-        # We can't generate an alias using symlinks because
-        # because this will break #pragma once in some compilers.
-        with open(aliasPath, "w") as f:
-            f.write("#pragma once\n")
-            f.write(f"#include <{c.id}/{os.path.basename(modPath)}>\n")
-
-
 def build(
     scope: TargetScope,
     components: Union[list[model.Component], model.Component, Literal["all"]] = "all",
@@ -429,10 +391,6 @@ def build(
 
     if isinstance(components, model.Component):
         components = [components]
-
-    for k, v in _hooks.items():
-        print(f"Running hook '{k}'")
-        v(scope)
 
     products: list[ProductScope] = []
     for c in components:
