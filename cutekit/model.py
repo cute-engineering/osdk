@@ -646,6 +646,8 @@ KINDS: dict[Kind, Type[Manifest]] = {
 
 # MARK: Dependency resolution --------------------------------------------------
 
+Candidate = tuple[Component, Resolved]
+
 
 @dt.dataclass
 class Resolver:
@@ -659,8 +661,6 @@ class Resolver:
     """The target for which to resolve dependencies."""
     _mappings: dict[str, list[Component]] = dt.field(default_factory=dict)
     """Mapping of component specs to their providers."""
-    _cache: dict[str, Resolved] = dt.field(default_factory=dict)
-    """Cache of resolved dependencies."""
     _baked = False
     """Whether the resolver has been baked."""
 
@@ -687,7 +687,7 @@ class Resolver:
 
         self._baked = True
 
-    def _provider(self, spec: str) -> tuple[Optional[str], str]:
+    def _provider(self, spec: str) -> tuple[Optional[Component], str]:
         """
         Returns the provider for a given spec.
 
@@ -720,9 +720,12 @@ class Resolver:
             ids = list(map(lambda x: x.id, result))
             return (None, f"Multiple providers for '{spec}': {','.join(ids)}")
 
-        return (result[0].id, "")
+        return (result[0], "")
 
-    def resolve(self, what: str, stack: list[str] = []) -> Resolved:
+    _cache: dict[str, Resolved] = dt.field(default_factory=dict)
+    """Cache of resolved dependencies."""
+
+    def resolve(self, spec: str, stack: list[str] = []) -> Resolved:
         """
         Resolve a given spec to a list of components.
 
@@ -733,48 +736,78 @@ class Resolver:
         Returns:
             A Resolved object containing the resolved dependencies.
         """
+        if spec in self._cache:
+            return self._cache[spec]
+        resolved = self._resolve(spec, stack)
+        self._cache[spec] = resolved
+        return resolved
+
+    def _resolve(self, spec: str, stack: list[str] = []) -> Resolved:
         self._bake()
 
-        if what in self._cache:
-            return self._cache[what]
+        candidates = self._mappings.get(spec, [])
+        if len(candidates) == 0:
+            return Resolved(f"no provider for '{spec}'")
 
-        keep, unresolvedReason = self._provider(what)
+        resolved: list[tuple[Component, Resolved]] = []
+        for component in candidates:
+            enabled, reason = component.isEnabled(self._target)
+            if not enabled:
+                resolved.append(
+                    (
+                        component,
+                        Resolved(f"component {component.id} is not enabled: {reason}"),
+                    )
+                )
+                continue
 
-        if not keep:
-            _logger.error(f"Dependency '{what}' not found: {unresolvedReason}")
-            self._cache[what] = Resolved(reason=unresolvedReason)
-            return self._cache[what]
+            if component.id in stack:
+                resolved.append(
+                    (component, Resolved(f"circular dependency detected: {stack}"))
+                )
+                continue
+            stack.append(spec)
 
-        if keep in self._cache:
-            return self._cache[keep]
+            failed = False
+            result: list[str] = []
+            for required in component.requires:
+                requiredResolved = self.resolve(required, stack + [component.id])
+                if requiredResolved.reason:
+                    reason = f"dependency '{required}' could not be resolved:\n{vt100.indent(requiredResolved.reason)}"
+                    resolved.append((component, Resolved(reason)))
+                    failed = True
+                    break
 
-        if keep in stack:
-            raise RuntimeError(
-                f"Dependency loop while resolving '{what}': {stack} -> {keep}"
+                result.extend(requiredResolved.required)
+
+            stack.pop()
+            if failed:
+                continue
+
+            result.insert(0, component.id)
+            resolved.append(
+                (component, Resolved(required=utils.uniqPreserveOrder(result)))
             )
 
-        stack.append(keep)
+        viable = list(filter(lambda x: x[1].reason is None, resolved))
 
-        component = self._registry.lookup(keep, Component)
-        if not component:
-            return Resolved(f"No provider for '{keep}'")
+        if len(viable) == 0:
+            triedMsg = vt100.indent(
+                "\n".join(
+                    map(
+                        lambda x: f"tried '{x[0].id}':\n{vt100.indent(x[1].reason or '')}",
+                        resolved,
+                    )
+                )
+            )
+            final = Resolved(f"no viable provider for '{spec}'\n{triedMsg}")
+        elif len(viable) > 1:
+            ids = list(map(lambda x: x[0].id, viable))
+            final = Resolved(f"multiple providers for '{spec}': {', '.join(ids)}")
+        else:
+            final = viable[0][1]
 
-        result: list[str] = []
-
-        for req in component.requires:
-            reqResolved = self.resolve(req, stack)
-            if reqResolved.reason:
-                stack.pop()
-
-                self._cache[keep] = Resolved(reason=reqResolved.reason)
-                return self._cache[keep]
-
-            result.extend(reqResolved.required)
-
-        stack.pop()
-        result.insert(0, keep)
-        self._cache[keep] = Resolved(required=utils.uniqPreserveOrder(result))
-        return self._cache[keep]
+        return final
 
 
 # MARK: Registry ---------------------------------------------------------------
