@@ -29,7 +29,7 @@ class Kind(Enum):
     EXE = "exe"
 
 
-# --- Manifest --------------------------------------------------------------- #
+# MARK: Manifest ---------------------------------------------------------------
 
 SUPPORTED_MANIFEST = [
     "https://schemas.cute.engineering/stable/cutekit.manifest.component.v1",
@@ -181,7 +181,7 @@ class Manifest(DataClassJsonMixin):
         return cast(utils.T, self)
 
 
-# --- Project ---------------------------------------------------------------- #
+# MARK: Project ----------------------------------------------------------------
 
 _project: Optional["Project"] = None
 
@@ -431,7 +431,7 @@ def _():
     project.fetchExterns()
 
 
-# --- Target ----------------------------------------------------------------- #
+# MARK: Target -----------------------------------------------------------------
 
 
 @dt.dataclass
@@ -555,7 +555,7 @@ class Target(Manifest):
         )
 
 
-# --- Component -------------------------------------------------------------- #
+# MARK: Component --------------------------------------------------------------
 
 
 @dt.dataclass
@@ -644,7 +644,7 @@ KINDS: dict[Kind, Type[Manifest]] = {
 }
 """Mapping of manifest kinds to their corresponding classes."""
 
-# --- Dependency resolution -------------------------------------------------- #
+# MARK: Dependency resolution --------------------------------------------------
 
 
 @dt.dataclass
@@ -777,7 +777,7 @@ class Resolver:
         return self._cache[keep]
 
 
-# --- Registry --------------------------------------------------------------- #
+# MARK: Registry ---------------------------------------------------------------
 
 _registry: Optional["Registry"] = None
 
@@ -976,6 +976,8 @@ class Registry(DataClassJsonMixin):
 
         for target in r.iter(Target):
             target.props |= props
+            if "version" not in target.props:
+                target.props["version"] = r.project.version
 
             # Resolve all components
             resolver = Resolver(r, target)

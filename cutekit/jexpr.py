@@ -134,22 +134,27 @@ def read(path: Path) -> Jexpr:
         raise RuntimeError(f"Failed to read {path}: {e}")
 
 
+def _assign(obj: dict, key: str, value: Any) -> None:
+    if isinstance(obj, dict):
+        obj[key] = value
+    else:
+        setattr(obj, key, value)
+
+
+_currentInclude: str | None = None
+
+
 def include(
     path: Path, locals: dict[str, Any] | None = None, globals: dict[str, Any] = _globals
 ) -> Jexpr:
     """
     Read and expand a JSON or TOML file.
     """
-    globalsWithFile = globals.copy()
-    globalsWithFile["__file__"] = path
-    return expand(read(path), locals, globals)
-
-
-def _assign(obj: dict, key: str, value: Any) -> None:
-    if isinstance(obj, dict):
-        obj[key] = value
-    else:
-        setattr(obj, key, value)
+    global _currentInclude
+    _currentInclude = str(path)
+    res = expand(read(path), locals, globals)
+    _currentInclude = None
+    return res
 
 
 def _get(obj: dict, key: str) -> Any:
@@ -196,7 +201,8 @@ def _union(lhs, rhs):
 
 
 def _relpath(*args):
-    return os.path.normpath(os.path.join(os.path.dirname(__file__), *args))
+    dir = os.path.dirname(_currentInclude or "")
+    return os.path.normpath(os.path.join(dir, *args))
 
 
 expose("jexpr.include", lambda path: include(Path(path)))
