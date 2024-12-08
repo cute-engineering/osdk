@@ -266,9 +266,10 @@ def _(args: CxxModmapArgs):
         record += " | "
 
     for n in needed:
-        record += f"{os.path.join(args.dir, n)}.pcm"
+        record += f"{os.path.join(args.dir, n)}.pcm "
 
     print(record)
+    print("  restat = 1")
 
 
 def compileSrcs(
