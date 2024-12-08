@@ -510,7 +510,7 @@ def restoreCwd():
     os.chdir(_cwd)
 
 
-# --- Commands --------------------------------------------------------------- #
+# MARK: Commands ---------------------------------------------------------------
 
 
 @cli.command("s", "shell", "Shell like commands")

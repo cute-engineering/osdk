@@ -1,11 +1,12 @@
 import os
 import logging
 import dataclasses as dt
+import json
 
 from pathlib import Path
 from typing import Callable, Literal, TextIO, Union
 
-from . import cli, shell, rules, model, ninja, const, vt100, mixins
+from . import cli, shell, rules, model, ninja, const, mixins, vt100
 
 _logger = logging.getLogger(__name__)
 
@@ -45,6 +46,9 @@ class TargetScope(Scope):
     def key(self) -> str:
         return super().key() + "/" + self.target.id + "/" + self.target.hashid
 
+    def buildpath(self, path: str | Path) -> Path:
+        return Path(self.target.builddir) / path
+
     @property
     def components(self):
         for c in self.registry.iterEnabled(self.target):
@@ -52,6 +56,9 @@ class TargetScope(Scope):
 
     def openComponentScope(self, c: model.Component):
         return ComponentScope(self.registry, self.target, c)
+
+    def up(self):
+        return Scope(self.registry)
 
 
 @dt.dataclass
@@ -90,6 +97,9 @@ class ComponentScope(TargetScope):
         os.environ["CK_BUILDDIR"] = str(Path(self.target.builddir).resolve())
         os.environ["CK_COMPONENT"] = self.component.id
 
+    def up(self):
+        return TargetScope(self.registry, self.target)
+
 
 @dt.dataclass
 class ProductScope(ComponentScope):
@@ -104,7 +114,7 @@ class ProductScope(ComponentScope):
         return shell.exec(str(self.path), *args)
 
 
-# --- Variables -------------------------------------------------------------- #
+# MARK: Variables --------------------------------------------------------------
 
 Compute = Callable[[TargetScope], list[str]]
 _vars: dict[str, Compute] = {}
@@ -173,41 +183,174 @@ def _computeCdef(scope: TargetScope) -> list[str]:
     return sorted(res)
 
 
-# --- Compilation ------------------------------------------------------------ #
+# MARK: Compilation ------------------------------------------------------------
 
 
-def compile(
-    w: ninja.Writer | None, scope: ComponentScope, rule: str, srcs: list[str]
+class CxxModmapArgs:
+    obj: str = cli.operand("obj", "Object file")
+    dir: str = cli.arg("d", "dir", "Build directory")
+    deps: str = cli.arg("d", "deps", "Dependencies file")
+
+
+# https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2022/p1689r5.html
+
+
+def p1689Query(data, query, *args):
+    for d in data:
+        for r in d["rules"]:
+            res = query(r, *args)
+            if res is not None:
+                return res
+    return None
+
+
+def p1689Resolve(obj: str, depFile: str) -> tuple[str | None, set[str]]:
+    with open(depFile, "r") as f:
+        data = json.load(f)
+
+        queue = []
+        needed: set[str] = set()
+
+        def queryLogicalName(rule: dict, output: str):
+            if rule["primary-output"] == output:
+                if "requires" in rule:
+                    for r in rule["requires"]:
+                        queue.append(r["logical-name"])
+                if "provides" in rule:
+                    return rule["provides"][0]["logical-name"]
+            return None
+
+        logicalName = p1689Query(data, queryLogicalName, obj)
+
+        while queue:
+            current = queue.pop(0)
+            if current in needed:
+                continue
+            needed.add(current)
+
+            def queryModuleMap(rule: dict, current: str):
+                if "provides" in rule:
+                    for r in rule["provides"]:
+                        if r["logical-name"] == current and "requires" in rule:
+                            for r in rule["requires"]:
+                                queue.append(r["logical-name"])
+
+            p1689Query(data, queryModuleMap, current)
+
+        return logicalName, needed
+
+
+@cli.command(None, "__cxx-modmap", "Generate a module map for C++")
+def _(args: CxxModmapArgs):
+    os.makedirs(args.dir, exist_ok=True)
+    logicalName, needed = p1689Resolve(args.obj, args.deps)
+    if logicalName is not None:
+        print("-x c++-module")
+        print(f"-fmodule-output={os.path.join(args.dir,  logicalName)}.pcm")
+    for n in needed:
+        print(f"-fmodule-file={n}={os.path.join(args.dir, n)}.pcm")
+
+
+@cli.command(None, "__cxx-dyndep", "Generate a dynamic dependency file for C++")
+def _(args: CxxModmapArgs):
+    logicalName, needed = p1689Resolve(args.obj, args.deps)
+    print("ninja_dyndep_version = 1.0")
+
+    record = f"build {args.obj}"
+    if logicalName is not None:
+        record += f" | {os.path.join(args.dir,  logicalName)}.pcm"
+
+    record += " : dyndep"
+
+    if len(needed) > 0:
+        record += " | "
+
+    for n in needed:
+        record += f"{os.path.join(args.dir, n)}.pcm "
+
+    print(record)
+
+
+def compileSrcs(
+    w: ninja.Writer | None, scope: ComponentScope, rule: rules.Rule, srcs: list[str]
 ) -> list[str]:
     res: list[str] = []
     for src in srcs:
         rel = Path(src).relative_to(scope.component.dirname())
-        dest = scope.buildpath(path="__obj__") / rel.with_suffix(rel.suffix + ".o")
-        t = scope.target.tools[rule]
+        dest = scope.buildpath(path="__obj__") / rel.with_suffix(
+            rel.suffix + rule.fileOut[1:]
+        )
+        obj = str(scope.buildpath(path="__obj__") / rel.with_suffix(rel.suffix + ".o"))
+        modmap = str(dest) + ".modmap"
+        dyndep = str(dest) + ".dd"
+        t = scope.target.tools[rule.id]
+
+        variables = {}
+        if rule.id == "cxx-scan":
+            variables["obj"] = obj
+
+        implicit = [*t.files]
+        if rule.id == "cxx":
+            implicit.append(modmap)
+            implicit.append(dyndep)
+            variables["modmap"] = modmap
+
         if w:
+            if rule.id == "cxx":
+                w.build(
+                    modmap,
+                    "cxx-modmap",
+                    src,
+                    implicit=[str(scope.up().buildpath("all.dd"))],
+                    variables={
+                        "ck_target": scope.target.id,
+                        "ck_component": scope.component.id,
+                        "obj": obj,
+                    },
+                )
+
+                w.build(
+                    dyndep,
+                    "cxx-dyndep",
+                    src,
+                    implicit=[str(scope.up().buildpath("all.dd"))],
+                    variables={
+                        "ck_target": scope.target.id,
+                        "ck_component": scope.component.id,
+                        "obj": obj,
+                    },
+                )
+
             w.build(
                 str(dest),
-                rule,
+                rule.id,
                 inputs=src,
-                order_only=t.files,
+                implicit=implicit,
+                dyndep=dyndep if rule.id == "cxx" else None,
                 variables={
                     "ck_target": scope.target.id,
                     "ck_component": scope.component.id,
+                    **variables,
                 },
             )
         res.append(str(dest))
     return res
 
 
-def compileObjs(w: ninja.Writer | None, scope: ComponentScope) -> list[str]:
+def compileObjs(
+    w: ninja.Writer | None, scope: ComponentScope
+) -> tuple[list[str], list[str]]:
     objs = []
+    ddi = []
     for rule in rules.rules.values():
-        if rule.id not in ["cp", "ld", "ar"]:
-            objs += compile(w, scope, rule.id, srcs=scope.wilcard(rule.fileIn))
-    return objs
+        if rule.id == "cxx-scan":
+            ddi += compileSrcs(w, scope, rule, srcs=scope.wilcard(rule.fileIn))
+        elif rule.id not in ["cp", "ld", "ar", "cxx-collect", "cxx-modmap"]:
+            objs += compileSrcs(w, scope, rule, srcs=scope.wilcard(rule.fileIn))
+    return objs, ddi
 
 
-# --- Ressources ------------------------------------------------------------- #
+# MARK: Ressources -------------------------------------------------------------
 
 
 def listRes(component: model.Component) -> list[str]:
@@ -235,7 +378,7 @@ def compileRes(
     return res
 
 
-# --- Linking ---------------------------------------------------------------- #
+# MARK: Linking ----------------------------------------------------------------
 
 
 def outfile(scope: ComponentScope) -> str:
@@ -272,7 +415,10 @@ def collectInjectedObjs(scope: ComponentScope) -> list[str]:
             continue
         if not req.type == model.Kind.LIB:
             raise RuntimeError(f"Component {r} is not a library")
-        res.extend(compileObjs(None, scope.openComponentScope(req)))
+
+        objs, _ = compileObjs(None, scope.openComponentScope(req))
+
+        res.extend(objs)
 
     return res
 
@@ -280,12 +426,12 @@ def collectInjectedObjs(scope: ComponentScope) -> list[str]:
 def link(
     w: ninja.Writer,
     scope: ComponentScope,
-) -> str:
+) -> tuple[str, list[str]]:
     w.newline()
     out = outfile(scope)
 
     res = compileRes(w, scope)
-    objs = compileObjs(w, scope)
+    objs, ddi = compileObjs(w, scope)
     if scope.component.type == model.Kind.LIB:
         w.build(
             out,
@@ -312,16 +458,24 @@ def link(
             },
             implicit=res,
         )
-    return out
+    return out, ddi
 
 
-# --- Phony ------------------------------------------------------------------ #
+# MARK: Phony ------------------------------------------------------------------
 
 
 def all(w: ninja.Writer, scope: TargetScope) -> list[str]:
     all: list[str] = []
+    ddis: list[str] = []
     for c in scope.registry.iterEnabled(scope.target):
-        all.append(link(w, scope.openComponentScope(c)))
+        out, ddi = link(w, scope.openComponentScope(c))
+        ddis.extend(ddi)
+        all.append(out)
+
+    collectedDdi = str(scope.buildpath("all.dd"))
+    w.build(collectedDdi, "cxx-collect", ddis)
+    all = [collectedDdi] + all
+
     w.build("all", "phony", all)
     w.default("all")
     return all
@@ -363,7 +517,8 @@ def gen(out: TextIO, scope: TargetScope):
         w.rule(
             i,
             f"{tool.cmd} {(tool.rule or rule.rule).replace('$flags',f'${i}flags')}",
-            description=f"{vt100.BLUE}$ck_target{vt100.RESET}/{vt100.CYAN}$ck_component{vt100.RESET}: {vt100.YELLOW}{i} {vt100.FAINT + vt100.WHITE}$out...{vt100.RESET}",
+            description=f"$ck_target/$ck_component: {i} $out...",
+            deps="gcc" if i in ["cxx", "cc"] else None,
             depfile=rule.deps,
         )
         w.newline()
@@ -406,7 +561,7 @@ def build(
     ninjaCmd = ["ninja", "-f", ninjaPath, *(outs if not all else [])]
 
     if generateCompilationDb:
-        database = shell.popen(*ninjaCmd, "-t", "compdb")
+        database = shell.popen(*ninjaCmd, "-t", "compdb", "cc", "cxx")
         with open("compile_commands.json", "w") as f:
             f.write(database)
     else:
@@ -415,7 +570,7 @@ def build(
     return products
 
 
-# --- Commands --------------------------------------------------------------- #
+# MARK: Commands ---------------------------------------------------------------
 
 
 @cli.command("b", "builder", "Build/Run/Clean a component or all components")
