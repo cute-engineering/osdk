@@ -1,6 +1,6 @@
 from cutekit import cli, utils
 
-# --- Parse Values ----------------------------------------------------------- #
+# MARK: Parse Values -----------------------------------------------------------
 
 
 def test_parse_int_val():
@@ -40,7 +40,7 @@ def test_parse_list_val():
     assert cli.parseValue('"foo","bar"') == ["foo", "bar"]
 
 
-# --- Parse Args ------------------------------------------------------------- #
+# MARK: Parse Args -------------------------------------------------------------
 
 
 def test_parse_short_arg():

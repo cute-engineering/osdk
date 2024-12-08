@@ -11,7 +11,7 @@ from cutekit import vt100, const, utils
 
 _logger = logging.getLogger(__name__)
 
-# --- Scan -------------------------------------------------------------- #
+# MARK: Scan --------------------------------------------------------------
 
 
 class Scan:
@@ -217,7 +217,7 @@ class Scan:
         return False
 
 
-# --- Parser ------------------------------------------------------------ #
+# MARK: Parser ------------------------------------------------------------
 
 PrimitiveValue = str | bool | int
 Object = dict[str, PrimitiveValue]
@@ -406,7 +406,7 @@ def parseArgs(args: list[str]) -> list[Token]:
     return res
 
 
-# --- Schema ----------------------------------------------------------------- #
+# MARK: Schema -----------------------------------------------------------------
 
 
 class FieldKind(Enum):
