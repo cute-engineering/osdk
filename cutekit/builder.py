@@ -4,6 +4,7 @@ import dataclasses as dt
 import json
 
 from pathlib import Path
+import platform
 from typing import Callable, Literal, TextIO, Union
 
 from . import cli, shell, rules, model, ninja, const, mixins, vt100
@@ -159,7 +160,13 @@ def _computeCinc(scope: TargetScope) -> list[str]:
         elif c.type == model.Kind.LIB:
             res.add(str(Path(c.dirname()).parent))
 
-    return sorted(map(lambda i: f"-I{i}", res))
+    incs = sorted(map(lambda i: f"-I{i}", res))
+    if scope.target.props["host"] and platform.system() == "Darwin":
+        incs.insert(
+            0,
+            f"-isysroot {shell.popen('xcrun', '--sdk', 'macosx', '--show-sdk-path').strip()}",
+        )
+    return incs
 
 
 @var("cdefs")
