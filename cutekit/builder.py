@@ -253,9 +253,11 @@ def _(args: CxxModmapArgs):
     logicalName, needed = p1689Resolve(args.obj, args.deps)
     if logicalName is not None:
         print("-x c++-module")
-        print(f"-fmodule-output={os.path.join(args.dir,  logicalName)}.pcm")
+        print(
+            f"-fmodule-output={os.path.join(args.dir,  logicalName).replace(':', '__')}.pcm"
+        )
     for n in needed:
-        print(f"-fmodule-file={n}={os.path.join(args.dir, n)}.pcm")
+        print(f"-fmodule-file={n}={os.path.join(args.dir, n).replace(':', '__')}.pcm")
 
 
 @cli.command(None, "__cxx-dyndep", "Generate a dynamic dependency file for C++")
@@ -265,7 +267,7 @@ def _(args: CxxModmapArgs):
 
     record = f"build {args.obj}"
     if logicalName is not None:
-        record += f" | {os.path.join(args.dir,  logicalName)}.pcm"
+        record += f" | {os.path.join(args.dir,  logicalName).replace(':', '__')}.pcm"
 
     record += " : dyndep"
 
@@ -273,7 +275,7 @@ def _(args: CxxModmapArgs):
         record += " | "
 
     for n in needed:
-        record += f"{os.path.join(args.dir, n)}.pcm "
+        record += f"{os.path.join(args.dir, n).replace(':', '__')}.pcm "
 
     print(record)
 
