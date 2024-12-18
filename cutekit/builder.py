@@ -743,6 +743,7 @@ def _(args: InstallArgs):
         pass
 
 
+@cli.command(None, "clean", "Clean build files")
 @cli.command("c", "builder/clean", "Clean build files")
 def _():
     model.Project.use()
