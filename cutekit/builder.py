@@ -247,7 +247,12 @@ def p1689Resolve(obj: str, depFile: str) -> tuple[str | None, set[str]]:
         return logicalName, needed
 
 
-@cli.command(None, "__cxx-modmap", "Generate a module map for C++")
+@cli.command(None, "tools", "Tools used by the build system")
+def _():
+    pass
+
+
+@cli.command(None, "tools/cxx-modmap", "Generate a module map for C++")
 def _(args: CxxModmapArgs):
     os.makedirs(args.dir, exist_ok=True)
     logicalName, needed = p1689Resolve(args.obj, args.deps)
@@ -260,7 +265,7 @@ def _(args: CxxModmapArgs):
         print(f"-fmodule-file={n}={os.path.join(args.dir, n).replace(':', '__')}.pcm")
 
 
-@cli.command(None, "__cxx-dyndep", "Generate a dynamic dependency file for C++")
+@cli.command(None, "tools/cxx-dyndep", "Generate a dynamic dependency file for C++")
 def _(args: CxxModmapArgs):
     logicalName, needed = p1689Resolve(args.obj, args.deps)
     print("ninja_dyndep_version = 1.0")

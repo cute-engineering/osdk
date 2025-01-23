@@ -455,10 +455,10 @@ Tools = dict[str, Tool]
 
 DEFAULT_TOOLS: Tools = {
     "cp": Tool("cp"),
-    "cxx-scan": Tool("clang-scan-deps"),
+    "cxx-scan": Tool(shell.latest("clang-scan-deps")),
     "cxx-collect": Tool("jq"),
-    "cxx-modmap": Tool("ck __cxx-modmap"),
-    "cxx-dyndep": Tool("ck __cxx-dyndep"),
+    "cxx-modmap": Tool("ck tools cxx-modmap"),
+    "cxx-dyndep": Tool("ck tools cxx-dyndep"),
 }
 """Default tools available in all projects."""
 
