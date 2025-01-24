@@ -593,7 +593,6 @@ def _():
 
 
 class BuildArgs(model.TargetArgs):
-    release: bool = cli.arg(None, "release", "Build in release mode")
     component: str = cli.operand("component", "Component to build", default="__main__")
     universe: bool = cli.arg(None, "universe", "Does it for all targets")
     database: bool = cli.arg(
@@ -607,9 +606,6 @@ class BuildArgs(model.TargetArgs):
 @cli.command(None, "build", "Build a component or all components")
 @cli.command("b", "builder/build", "Build a component or all components")
 def _(args: BuildArgs):
-    if args.release:
-        args.mixins.append("release")
-
     if not args.noCache:
         args.mixins.append("cache")
 

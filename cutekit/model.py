@@ -468,10 +468,12 @@ class RegistryArgs:
     Arguments for the Registry class.
     """
 
-    props: dict[str, jexpr.Jexpr] = cli.arg(None, "props", "Set a property")
+    props: dict[str, str] = cli.arg(None, "props", "Set a property")
     """Properties to set on the registry."""
     mixins: list[str] = cli.arg(None, "mixins", "Apply mixins")
     """Mixins to apply to the registry."""
+    release: bool = cli.arg(None, "release", "Build in release mode")
+    """Whether to build in release mode. Same as --mixins=release."""
 
 
 class TargetArgs(RegistryArgs):
@@ -598,7 +600,7 @@ class Component(Manifest):
     """Properties of the component."""
     tools: Tools = dt.field(default_factory=dict)
     """Tools provided by the component."""
-    enableIf: dict[str, list[Any]] = dt.field(default_factory=dict)
+    enableIf: dict[str, list[str | bool | None]] = dt.field(default_factory=dict)
     """Conditions that must be met for the component to be enabled."""
     requires: list[str] = dt.field(default_factory=list)
     """List of required component specs."""
@@ -624,10 +626,14 @@ class Component(Manifest):
         """
         for k, v in self.enableIf.items():
             if k not in target.props:
+                # The value is defaulted ?
+                if None in v:
+                    return True, ""
+
                 _logger.info(f"Component {self.id} disabled by missing {k} in target")
                 return False, f"Missing props '{k}' in target"
 
-            if target.props[k] not in v:
+            elif target.props[k] not in v:
                 vStrs = [f"'{str(x)}'" for x in v]
                 _logger.info(
                     f"Component {self.id} disabled by {k}={target.props[k]} not in {v}"
@@ -956,6 +962,9 @@ class Registry(DataClassJsonMixin):
 
         if _registry is not None:
             return _registry
+
+        if args.release:
+            args.mixins += ["release"]
 
         project = Project.use()
         _registry = Registry.load(project, args.mixins, args.props)
