@@ -1,0 +1,12 @@
+{
+    "$schema": "https://schemas.cute.engineering/stable/cutekit.manifest.component.v1",
+    "id": "hello-world",
+    "description": "A simple hello world",
+    "type": "exe",
+    "requires": [
+        "hello-world.lib"
+    ],
+    "provides": [
+        "__main__"
+    ]
+}
