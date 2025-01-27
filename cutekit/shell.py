@@ -271,7 +271,7 @@ def _profileCpuLinux(cmd: list[str], rate=1000):
         proc = subprocess.Popen(
             ["perf", "script", "-i", perfFile], stdout=subprocess.PIPE
         )
-        subprocess.run(["speedscope", "-"], stdin=proc.stdout)
+        subprocess.run(["npm", "exec", "speedscope", "--", "-"], stdin=proc.stdout)
         proc.wait()
     except Exception as e:
         rmrf(perfFile)

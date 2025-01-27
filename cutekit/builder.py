@@ -259,7 +259,7 @@ def _(args: CxxModmapArgs):
     if logicalName is not None:
         print("-x c++-module")
         print(
-            f"-fmodule-output={os.path.join(args.dir,  logicalName).replace(':', '__')}.pcm"
+            f"-fmodule-output={os.path.join(args.dir, logicalName).replace(':', '__')}.pcm"
         )
     for n in needed:
         print(f"-fmodule-file={n}={os.path.join(args.dir, n).replace(':', '__')}.pcm")
@@ -272,7 +272,7 @@ def _(args: CxxModmapArgs):
 
     record = f"build {args.obj}"
     if logicalName is not None:
-        record += f" | {os.path.join(args.dir,  logicalName).replace(':', '__')}.pcm"
+        record += f" | {os.path.join(args.dir, logicalName).replace(':', '__')}.pcm"
 
     record += " : dyndep"
 
@@ -530,7 +530,7 @@ def gen(out: TextIO, scope: TargetScope):
         )
         w.rule(
             i,
-            f"{tool.cmd} {(tool.rule or rule.rule).replace('$flags',f'${i}flags')}",
+            f"{tool.cmd} {(tool.rule or rule.rule).replace('$flags', f'${i}flags')}",
             description=f"$ck_target/$ck_component: {i} $out...",
             deps="gcc" if i in ["cxx", "cc"] else None,
             depfile=rule.deps,
