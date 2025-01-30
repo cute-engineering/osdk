@@ -457,8 +457,8 @@ DEFAULT_TOOLS: Tools = {
     "cp": Tool("cp"),
     "cxx-scan": Tool(shell.latest("clang-scan-deps")),
     "cxx-collect": Tool("jq"),
-    "cxx-modmap": Tool("ck tools cxx-modmap"),
-    "cxx-dyndep": Tool("ck tools cxx-dyndep"),
+    "cxx-modmap": Tool("ck --safemode tools cxx-modmap"),
+    "cxx-dyndep": Tool("ck --safemode tools cxx-dyndep"),
 }
 """Default tools available in all projects."""
 

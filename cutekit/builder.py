@@ -315,7 +315,7 @@ def compileSrcs(
                     modmap,
                     "cxx-modmap",
                     src,
-                    implicit=[str(scope.up().buildpath("all.dd"))],
+                    order_only=[str(scope.up().buildpath("all.dd"))],
                     variables={
                         "ck_target": scope.target.id,
                         "ck_component": scope.component.id,
@@ -327,7 +327,7 @@ def compileSrcs(
                     dyndep,
                     "cxx-dyndep",
                     src,
-                    implicit=[str(scope.up().buildpath("all.dd"))],
+                    order_only=[str(scope.up().buildpath("all.dd"))],
                     variables={
                         "ck_target": scope.target.id,
                         "ck_component": scope.component.id,
