@@ -468,7 +468,7 @@ class RegistryArgs:
     Arguments for the Registry class.
     """
 
-    props: dict[str, str | bool] = cli.arg(None, "props", "Set a property")
+    props: dict[str, str] = cli.arg(None, "props", "Set a property")
     """Properties to set on the registry."""
     mixins: list[str] = cli.arg(None, "mixins", "Apply mixins")
     """Mixins to apply to the registry."""
